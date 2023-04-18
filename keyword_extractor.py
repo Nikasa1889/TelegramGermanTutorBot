@@ -28,9 +28,9 @@ class KeywordExtractor:
     self.define_template = PromptTemplate(
       template=(
         "Given a list of keywords, provide detailed info for each of them. "
-        "Each keyword requires `input`: the requested keyword; "
-        "`root`: the root form with definite article for noun; "
-        "`pos`: noun, verb, adj, adv, prep, conj,...; `def`: its meaning.\n\n"
+        "Each keyword has: `input`: the requested keyword;"
+        "`root`: the root form with definite article for noun;"
+        "`pos`: noun, verb, adj, adv, prep, conj,...;`def`: its meaning\n\n"
         "Keywords: {keywords}\n\n{format_instructions}"),
       input_variables=["keywords"],
       partial_variables={

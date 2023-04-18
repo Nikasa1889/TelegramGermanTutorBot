@@ -15,7 +15,8 @@ class DefinitionExtractor:
       "Output contains one meaning per line, with following fields:\n"
       " - input: the word being asked;\n"
       " - root: root form of the word, with definite article if it's a noun;\n"
-      " - pos: part of speech in abbr (Noun, Adj, Adv,...); def: definition;\n"
+      " - pos: part of speech in abbr (Noun, Adj, Adv,...);\n"
+      " - def: definition;\n"
       " - ex: a German example of the word being used.\n"
       "Example:\n"
       "input=fahren;root=fahren;pos=Verb;def=to drive/to ride/to travel;"
@@ -31,13 +32,12 @@ class DefinitionExtractor:
   async def extract_definitions(self, word: str) -> List[Keyword]:
     extracted_keywords = []
     defined_word_str = await self.define_chain.apredict(word=word)
+    print(defined_word_str)
     pattern = r"input=(.+?);root=(.+?);pos=(.+?);def=(.+?);ex=(.+)"
     for match in re.finditer(pattern, defined_word_str):
       word, root, pos, definition, example = match.groups()
-      keyword = Keyword(root=root,
-                        word=word,
-                        pos=pos,
-                        snippet=example,
+      keyword = Keyword(root=root, word=word, pos=pos, snippet=example,
                         definition=definition)
       extracted_keywords.append(keyword)
+    print(extracted_keywords)
     return extracted_keywords
