@@ -3,8 +3,10 @@ import asyncio, nest_asyncio
 import os
 from datetime import datetime
 
-from telegram import ReplyKeyboardRemove, Update, Poll
+import telegram
+from telegram import ReplyKeyboardRemove, Update, Poll, Message
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ChatAction
 
 from telegram.ext import (
   Application,
@@ -19,6 +21,8 @@ from telegram.ext import (
 
 from keyword_extractor import KeywordExtractor
 from question_extractor import QuestionExtractor
+from definition_extractor import DefinitionExtractor
+from translation_extractor import TranslationExtractor 
 from data_models import UserProfile, LearningSession, Keyword
 
 TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
@@ -26,24 +30,6 @@ KEYWORDS_PER_ROW = 3
 KEYWORDS_PER_PAGE = 3 * KEYWORDS_PER_ROW
 
 
-async def generate_translation(phrase: str) -> str:
-  return "Sample translation for " + phrase
-
-
-async def generate_definition(phrase: str) -> Keyword:
-  # Replace this part with your actual definition generation logic.
-  root = "SampleRoot_" + phrase
-  definition = "Sample definition for " + phrase
-  snippet = "Sample snippet for " + phrase
-
-  keyword = Keyword(root=root,
-                    word=phrase,
-                    snippet=snippet,
-                    definition=definition)
-  return keyword
-
-
-# Enable logging
 logging.basicConfig(
   format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
   level=logging.INFO)
@@ -52,8 +38,21 @@ logger = logging.getLogger(__name__)
 LEARN_TEXT, ASK_QUESTION = range(2)
 keyword_extractor = KeywordExtractor()
 question_extractor = QuestionExtractor()
+definition_extractor = DefinitionExtractor()
+translation_extractor = TranslationExtractor()
 
+async def create_placeholder_message(chat_id: int,
+                               context: ContextTypes.DEFAULT_TYPE) -> Message:
+  await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING) 
+  # Send the initial waiting message
+  return await context.bot.send_message(chat_id=chat_id, text="I'm thinking, please wait...")
 
+def get_user_profile(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> UserProfile:
+  # Create or update UserProfile in user_data
+  if 'profile' not in context.user_data:
+    context.user_data['profile'] = UserProfile(user_id=user_id)
+  return context.user_data['profile']
+  
 async def learn_handler(update: Update,
                         context: ContextTypes.DEFAULT_TYPE) -> int:
   logging.info("Entering learn_handler")
@@ -74,12 +73,11 @@ async def learn_handler(update: Update,
   chat_id = update.effective_chat.id
 
   # Create or update UserProfile in user_data
-  if 'profile' not in context.user_data:
-    context.user_data['profile'] = UserProfile(user_id=user_id)
-
-  user_profile = context.user_data['profile']
+  user_profile = get_user_profile(user_id, context)
   # TODO: Check if text is too short (less than 5 sentences), then just translate and explain each sentence.
-  # TODO: Check if the text too long (more than 1000 tokens).
+    
+  # Truncate text to max 1500 tokens.
+  text = text[:1500]
   # Create a new LearningSession
   session_id = len(user_profile.sessions)
   session = LearningSession(session_id=session_id,
@@ -96,7 +94,7 @@ async def learn_handler(update: Update,
   # Generate keywords for the session.
   await update.message.reply_text(
     "Click a keyword to learn more:",
-    reply_markup=create_keywords_keyboard(context))
+    reply_markup=create_keywords_keyboard(update, context))
 
   # Generate quiz and start asking questions
   await ask_question_handler(update, context)
@@ -105,9 +103,10 @@ async def learn_handler(update: Update,
 
 
 def create_keywords_keyboard(
-    context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
+    update: Update, context: ContextTypes.DEFAULT_TYPE) -> InlineKeyboardMarkup:
   logging.info("Entering create_keywords")
-  session = context.user_data['profile'].sessions[-1]
+  user_profile = get_user_profile(update.effective_user.id, context)
+  session = user_profile.sessions[-1]
   keywords = [keyword.word for keyword in session.keywords]
 
   current_page = session.current_keyword_page
@@ -133,12 +132,13 @@ def create_keywords_keyboard(
 async def ask_question_handler(update: Update,
                                context: ContextTypes.DEFAULT_TYPE) -> int:
   logging.info("Entering ask_question_handler")
-  session = context.user_data["profile"].sessions[-1]
+  user_profile = get_user_profile(update.effective_user.id, context)
+  session = user_profile.sessions[-1]
   if session.next_question_idx >= len(session.quiz):
     await context.bot.send_message(session.chat_id,
                                    f'{session.summary_quiz()}')
     await context.bot.send_message(
-      session.chat_id, "Select /continue, /stoplearn, or /learnnew to proceed")
+      session.chat_id, "Select /morequestions, /translate, /stoplearn, or /learnnew to proceed")
   else:
     question = session.quiz[session.next_question_idx]
     logger.info(f'ask_question: {question}')
@@ -159,7 +159,8 @@ async def ask_question_handler(update: Update,
 async def ask_question_on_answer_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
   poll_answer = update.poll_answer
-  session = context.user_data['profile'].sessions[-1]
+  user_profile = get_user_profile(update.effective_user.id, context)
+  session = user_profile.sessions[-1]
   current_question = session.quiz[session.next_question_idx - 1]
 
   current_question.answer_time = datetime.now()
@@ -168,12 +169,13 @@ async def ask_question_on_answer_handler(
   return await ask_question_handler(update, context)
 
 
-async def continue_handler(update: Update,
+async def morequestions_handler(update: Update,
                            context: ContextTypes.DEFAULT_TYPE) -> int:
-  logging.info("Entering continue_handler")
-  user_profile = context.user_data['profile']
+  logging.info("Entering morequestions_handler")
+  user_profile = get_user_profile(update.effective_user.id, context)
   session = user_profile.sessions[-1]
-
+  message = await create_placeholder_message(update.effective_user.id, context)
+  await message.edit_text("Generating new quiz...")
   # Generate a new set of questions and append them to the quiz
   new_questions = await question_extractor.extract_questions(session.text)
   session.quiz.extend(new_questions)
@@ -184,7 +186,7 @@ async def continue_handler(update: Update,
 async def keywords_on_click_handler(update: Update,
                                     context: ContextTypes.DEFAULT_TYPE):
   query = update.callback_query
-  user_profile = context.user_data['profile']
+  user_profile = get_user_profile(update.effective_user.id, context)
   session = user_profile.sessions[-1]
   data = query.data.split()
 
@@ -192,14 +194,14 @@ async def keywords_on_click_handler(update: Update,
     if session.current_keyword_page <= 0: return
     session.current_keyword_page = max(0, session.current_keyword_page - 1)
     return await query.edit_message_reply_markup(
-      create_keywords_keyboard(context))
+      create_keywords_keyboard(update, context))
   elif data[0] == "next_page":
     max_page = (len(session.keywords) - 1) // KEYWORDS_PER_PAGE
     if session.current_keyword_page >= max_page: return
     session.current_keyword_page = min(max_page,
                                        session.current_keyword_page + 1)
     return await query.edit_message_reply_markup(
-      create_keywords_keyboard(context))
+      create_keywords_keyboard(update, context))
   else:
     selected_keyword = ' '.join(data[1:])
     keyword = next((k for k in session.keywords if k.word == selected_keyword),
@@ -208,7 +210,7 @@ async def keywords_on_click_handler(update: Update,
     if keyword:
       user_profile.vocabs.click_keyword(keyword, session.session_id)
       await query.edit_message_text(
-        keyword.summary(), reply_markup=create_keywords_keyboard(context))
+        keyword.summary(), reply_markup=create_keywords_keyboard(update, context))
     else:
       await query.answer("Keyword not found.")
 
@@ -229,7 +231,7 @@ async def learn_text_handler(update: Update,
 async def stop_learn_handler(update: Update,
                              context: ContextTypes.DEFAULT_TYPE) -> int:
   logging.info("Entering stop_learn_handler")
-  user_profile = context.user_data['profile']
+  user_profile = get_user_profile(update.effective_user.id, context)
   session = user_profile.sessions[-1]
   session.end_time = datetime.now()
 
@@ -252,32 +254,38 @@ async def define_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 
   phrase = " ".join(context.args)
-  keyword = await generate_definition(phrase)
-  context.user_data['profile'].vocabs.define_vocab(keyword, session_id=-1)
+  keywords_future = definition_extractor.extract_definitions(phrase)
+  message = await create_placeholder_message(update.message.chat_id, context)
+  keywords = await keywords_future
+  user_profile = get_user_profile(update.effective_user.id, context)
+  for keyword in keywords:
+    user_profile.vocabs.define_vocab(keyword, session_id=-1)
   # Reply to the user with the definition
-  await update.message.reply_text(keyword.summary())
-
+  await message.edit_text("\n\n".join(kw.summary() for kw in keywords))
 
 async def translate_handler(update: Update,
                             context: ContextTypes.DEFAULT_TYPE):
   logging.info("Entering translate_handler")
-
+  user_profile = get_user_profile(update.effective_user.id, context)
   # Check if the user provided the text
-  if len(context.args) == 0:
-    await update.message.reply_text(
-      "No text to translate. Send /translate <text>")
+  
+  if len(context.args) > 0:
+    text = " ".join(context.args)
+  elif user_profile.sessions and user_profile.sessions[-1].end_time is None:
+    # If the user is in the middle of a session, use the last session's text. 
+    text = user_profile.sessions[-1].text
+  else:
+    await update.message.reply_text("No text to translate. Send /translate <text>")
     return
-
-  text = " ".join(context.args)
+  message = await create_placeholder_message(update.message.chat_id, context)
   # Reply to the user with the translation
-  await update.message.reply_text(await generate_translation(text))
+  await message.edit_text(await translation_extractor.extract_translation(text))
+  await update.message.reply_text("Select /morequestions, /translate, /stoplearn, or /learnnew to proceed")
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
   # Create UserProfile if not exist.
-  if 'profile' not in context.user_data:
-    user_id = update.effective_user.id
-    context.user_data['profile'] = UserProfile(user_id=user_id)
+  user_profile = get_user_profile(update.effective_user.id, context)
 
   help_text = ("Welcome to GermanTutor Bot!\n\n"
                "Send /learn <text> to start learning session about the text.\n"
@@ -309,7 +317,8 @@ def main():
       LEARN_TEXT:
       [MessageHandler(filters.TEXT & ~filters.COMMAND, learn_text_handler)],
       ASK_QUESTION: [
-        CommandHandler("continue", continue_handler),
+        CommandHandler("morequestions", morequestions_handler),
+        CommandHandler("translate", translate_handler),
         CommandHandler("learnnew", learn_handler)
       ]
     },

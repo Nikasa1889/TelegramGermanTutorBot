@@ -13,7 +13,7 @@ class Keyword(BaseModel):
   definition: str = Field(description="Definition of the word")
 
   def summary(self) -> str:
-    optional_snipet = f"\n\n{self.snippet}" if self.snippet else ""
+    optional_snipet = f"\n\"{self.snippet}\"" if self.snippet else ""
     return f"{self.root} ({self.pos}): {self.definition}{optional_snipet}"
 
 
