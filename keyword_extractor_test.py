@@ -21,8 +21,8 @@ class TestKeywordExtractor(unittest.IsolatedAsyncioTestCase):
 
     required_words = [
       Keyword(root='der Informationsschalter', word='Informationsschalter', pos='Noun', snippet='Ich suche mir Hilfe an dem Informationsschalter.', definition='information desk'),
-      Keyword(root='sonnig', word='sonniger', pos='Adj', snippet='Heute ist ein sonniger Tag und ich möchte meine Großeltern in ...', definition='sunny'),
-      Keyword(root='besuchen', word='besuchen', pos='Verb', snippet='... ich möchte meine Großeltern in Hamburg besuchen.', definition='visit')]
+      Keyword(root='sonnig', word='sonniger', pos='Adj', snippet='Heute ist ein sonniger Tag und ich möchte meine Großeltern in Hamburg besuchen.', definition='sunny'),
+      Keyword(root='besuchen', word='besuchen', pos='Verb', snippet='Heute ist ein sonniger Tag und ich möchte meine Großeltern in Hamburg besuchen.', definition='visit')]
     extracted_keywords = {kw.word: kw for kw in keywords}
     for word in required_words:
       self.assertIn(word.word, extracted_keywords,

@@ -12,13 +12,12 @@ class DefinitionExtractor:
 
     self.define_template = PromptTemplate(template=(
       "Return information about the German word `{word}` in English. "
-      "Output contains one meaning per line, with following fields:\n"
-      " - input: the word being asked;\n"
-      " - root: root form of the word, with definite article if it's a noun;\n"
-      " - pos: part of speech in abbr (Noun, Adj, Adv,...);\n"
-      " - def: definition;\n"
-      " - ex: a German example of the word being used.\n"
-      "Example:\n"
+      "For each meaning of the word, provides the following fields: "
+      "input=the word being asked;root=root form of the word for the "
+      "current meaning, with definite article if it's a noun;"
+      "pos=part of speech in abbr (Noun, Adj, Adv,...);def=meaning;ex=a German "
+      "example of the word being used.\n"
+      "The output presents one meaning in a single line. Example:\n"
       "input=fahren;root=fahren;pos=Verb;def=to drive/to ride/to travel;"
       "ex=Ich fahre morgen nach Berlin (I'm driving/going to Berlin tomorrow)."
       "input=fahren;root=das Fahren; pos=Noun; def=driving;"
@@ -33,9 +32,11 @@ class DefinitionExtractor:
     extracted_keywords = []
     defined_word_str = await self.define_chain.apredict(word=word)
     print(defined_word_str)
-    pattern = r"input=(.+?);root=(.+?);pos=(.+?);def=(.+?);ex=(.+)"
+    pattern = r"input=(.+?);\s?root=(.*?);\s?pos=(.+?);\s?def=(.+?);\s?ex=(.+)"
     for match in re.finditer(pattern, defined_word_str):
       word, root, pos, definition, example = match.groups()
+      if not root:
+        root = word
       keyword = Keyword(root=root, word=word, pos=pos, snippet=example,
                         definition=definition)
       extracted_keywords.append(keyword)

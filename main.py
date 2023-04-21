@@ -1,7 +1,9 @@
 import logging
 import asyncio
+import random
 import os
 from datetime import datetime
+from typing import Optional
 
 from telegram import ReplyKeyboardRemove, Update, Poll, Message
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -58,21 +60,31 @@ def get_user_profile(user_id: int,
   return context.user_data['profile']
 
 
-async def learn_handler(update: Update,
-                        context: ContextTypes.DEFAULT_TYPE) -> int:
-  logging.info("Entering learn_handler")
-  # Check if user sent /learn command with text
+def retrieve_text_to_learn(text: Optional[str],
+                           update: Update) -> Optional[str]:
+  if text:
+    return text
   if update.message.text.startswith("/learn"):
     # There is <text> argument.
     if len(update.message.text.split()) > 1:
-      text = update.message.text[len("/learn"):].strip()
+      return update.message.text[len("/learn"):].strip()
     else:
-      await update.message.reply_text(
-        "Please provide the text you want to learn about: ")
-      return LEARN_TEXT
+      return None
   else:
     # No /learn param, so must be in LEARN_TEXT state already
-    text = update.message.text
+    return update.message.text
+
+
+async def learn_handler(update: Update,
+                        context: ContextTypes.DEFAULT_TYPE,
+                        text: Optional[str] = None) -> int:
+  logging.info("Entering learn_handler")
+  text = retrieve_text_to_learn(text, update)
+  if not text:
+    await update.message.reply_text(
+      "Please send a German text you want to learn, "
+      "or /randomA1, /randomA2, or /randomB1 to learn a random German text: ")
+    return LEARN_TEXT
 
   user_id = update.effective_user.id
   chat_id = update.effective_chat.id
@@ -91,7 +103,7 @@ async def learn_handler(update: Update,
                             start_time=datetime.now())
   user_profile.sessions.append(session)
   await update.message.reply_text(
-    "I'm extracting keywords and questions, please wait a few seconds...")
+    "I'm extracting keywords and questions, please wait ~30 seconds...")
   # Run all requests in parallel.
   session.keywords, session.quiz = await asyncio.gather(
     keyword_extractor.extract_keywords(text),
@@ -216,6 +228,9 @@ async def keywords_on_click_handler(update: Update,
 
     if keyword:
       user_profile.vocabs.click_keyword(keyword, session.session_id)
+      if keyword.summary() == query.message.text:
+        # Users click on the same keyword, skip.
+        return None
       await query.edit_message_text(keyword.summary(),
                                     reply_markup=create_keywords_keyboard(
                                       update, context))
@@ -230,10 +245,42 @@ async def learn_text_handler(update: Update,
   logging.info("Entering learn_text_handler")
   text = update.message.text.strip()
   if text:
-    return await learn_handler(update, context)
+    return await learn_handler(update, context, text)
   else:
-    await update.message.reply_text("Please provide a non-empty text.")
+    await update.message.reply_text(
+      "Please send a non-empty text or /randomA1, /randomA2 or /randomB1")
     return LEARN_TEXT
+
+
+def remove_introducing_paragraph(string: str) -> str:
+  paragraphs = string.split('\n\n')
+  if paragraphs[0].endswith(':'):
+    del paragraphs[0]
+  return '\n\n'.join(paragraphs)
+
+
+async def random_text_handler(update: Update,
+                              context: ContextTypes.DEFAULT_TYPE) -> int:
+  logging.info("Entering random_text_handler")
+  message = await create_placeholder_message(update.effective_user.id, context)
+  random_type = random.choice(["story"])
+  level = random.choice(["A1", "A2", "B1", "B2"])
+  level_map = {
+    "/randomA1": "A1",
+    "/randomA2": "A2",
+    "/randomB1": "B1",
+    "/randomB2": "B2"
+  }
+  if update.message.text in level_map:
+    level = level_map[update.message.text]
+  await message.edit_text(
+    f"Generating a German {random_type} at {level} level for you to learn...")
+  text = await ask_anything_extractor.extract_response(
+    f"Give me an interesting {random_type} at {level} level in German. Only include German text!"
+  )
+  text = remove_introducing_paragraph(text)
+  await message.edit_text(text)
+  return await learn_handler(update, context, text)
 
 
 async def stop_learn_handler(update: Update,
@@ -273,7 +320,12 @@ async def define_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
   for keyword in keywords:
     user_profile.vocabs.define_vocab(keyword, session_id=-1)
   # Reply to the user with the definition
-  await message.edit_text("\n\n".join(kw.summary() for kw in keywords))
+  if keywords:
+    await message.edit_text("\n\n".join(kw.summary() for kw in keywords))
+  else:
+    generic_def = await ask_anything_extractor.extract_response(
+      f'What does ` {phrase}` mean?')
+    await message.edit_text(generic_def)
 
 
 async def translate_handler(update: Update,
@@ -295,23 +347,19 @@ async def translate_handler(update: Update,
   # Reply to the user with the translation
   await message.edit_text(await
                           translation_extractor.extract_translation(text))
-  await update.message.reply_text(
-    "Select /morequestions, /translate, /stoplearn, or /learnnew to proceed")
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  # Create UserProfile if not exist.
-  user_profile = get_user_profile(update.effective_user.id, context)
-
-  help_text = ("Welcome to GermanTutor Bot!\n\n"
-               "Send /learn <text> to start learning session about the text.\n"
-               "During the session, you can:\n"
-               "- Learn keywords from the text\n"
-               "- Answer quiz questions\n"
-               "Send /define <word> to get short definition\n"
-               "Send /translate <text> to get translation\n"
-               "Send any text to ask ChatGPT directly\n"
-               "Send /help to see this message.")
+  help_text = (
+    "Welcome to GermanTutor Bot!\n\n"
+    "Send /learn: start learning a German Text. I'll help you: \n"
+    "- Learn keywords from the text\n"
+    "- Practice with quiz questions\n"
+    "- Translate the text\n"
+    "Send /define Danke: short definition of the word 'Danke'\n"
+    "Send /translate Es war einmal: to translate the phrase 'Es war einmal'\n"
+    "Send any question, like 'Why \"Ich weiß, dass ich Deutsch lernen kann\" and not \"dass ich kann lernen Deutsch\"?'\n"
+    "Send /help to see this message.")
 
   await update.message.reply_text(help_text,
                                   reply_markup=ReplyKeyboardRemove())
@@ -330,8 +378,13 @@ def main():
   learn_conv_handler = ConversationHandler(
     entry_points=[CommandHandler("learn", learn_handler)],
     states={
-      LEARN_TEXT:
-      [MessageHandler(filters.TEXT & ~filters.COMMAND, learn_text_handler)],
+      LEARN_TEXT: [
+        MessageHandler(filters.TEXT & ~filters.COMMAND, learn_text_handler),
+        CommandHandler("random", random_text_handler),
+        CommandHandler("randomA1", random_text_handler),
+        CommandHandler("randomA2", random_text_handler),
+        CommandHandler("randomB1", random_text_handler),
+      ],
       ASK_QUESTION: [
         CommandHandler("morequestions", morequestions_handler),
         CommandHandler("translate", translate_handler),

@@ -58,15 +58,15 @@ class KeywordExtractor:
 
       for sentence in sentences:
         if pattern.search(sentence):
-          match_start = pattern.search(sentence).start()
-          start = max(0, match_start - 40)
-          end = min(len(sentence), match_start + len(keyword) + 40)
-          truncated_sentence = sentence[start:end]
-          if start > 0:
-            truncated_sentence = "..." + truncated_sentence
-          if end < len(sentence):
-            truncated_sentence = truncated_sentence + "..."
-          found_sentences.append(truncated_sentence)
+          # match_start = pattern.search(sentence).start()
+          # start = max(0, match_start - 40)
+          # end = min(len(sentence), match_start + len(keyword) + 40)
+          # truncated_sentence = sentence[start:end]
+          # if start > 0:
+          #   truncated_sentence = "..." + truncated_sentence
+          # if end < len(sentence):
+          #   truncated_sentence = truncated_sentence + "..."
+          found_sentences.append(sentence)
           break
       else:
         found_sentences.append("")

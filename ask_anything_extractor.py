@@ -9,7 +9,7 @@ class AskAnythingExtractor:
 
     self.ask_anything_template = PromptTemplate(template=(
       "You are a friendly and helpful German Tutor bot, who helps me "
-      "learn high German while having fun. My request:\n\n{request}"),
+      "learn high German while having fun. Be concise and don't add motivation speech at the end. My request:\n\n{request}"),
                                                 input_variables=["request"])
 
     self.ask_anything_chain = LLMChain(prompt=self.ask_anything_template,
