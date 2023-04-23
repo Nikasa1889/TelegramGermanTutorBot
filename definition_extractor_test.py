@@ -15,6 +15,16 @@ class TesDefinitiontExtractor(unittest.IsolatedAsyncioTestCase):
     self.assertEqual(sonnig_word.root, "sonnig")
     self.assertGreaterEqual(len(sonnig_word.snippet), 20)
 
+  async def test_entdeckte(self):
+    extractor = DefinitionExtractor()
+    keywords = await extractor.extract_definitions("entdeckte")
+    print(keywords)
+    self.assertGreaterEqual(len(keywords), 1)
+    
+    verb_word = next(kw for kw in keywords if kw.pos == "Verb")
+    self.assertIsNotNone(verb_word)
+    self.assertEqual(verb_word.root, "entdecken")
+
   async def test_multiple_meanings(self):
     extractor = DefinitionExtractor()
     keywords = await extractor.extract_definitions("suchen")

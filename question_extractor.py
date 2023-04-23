@@ -14,11 +14,11 @@ class QuestionExtractor:
                 "my understanding of a German text from top to bottom. "
                 "Use only information in the text to generate question. "
                 "One question has a single correct answer. "
-                "A question has the following fields:\n"
-                "- `text`: question text\n"
-                "-  `a`, `b`,`c`,`d`:  4 options\n"
-                "-  `ans`: correct answer, either a, b, c, or d\n"
-                "-  `expl`: explains why ans is correct.\n\n"
+                "A question has the following fields: "
+                "text=the question text;"
+                "a=1st option;b=2nd option;c=3rd option;d=4th option;"
+                "ans=correct answer, either a, b, c, or d;"
+                "expl=explains why ans is correct.\n\n"
                 "{text}\n\n{format_instructions}"),
       input_variables=["text"],
       partial_variables={

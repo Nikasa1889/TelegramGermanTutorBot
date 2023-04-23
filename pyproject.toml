@@ -15,9 +15,10 @@ nltk = "^3.8.1"
 openai = "^0.27.4"
 langchain = "^0.0.142"
 tiktoken = "^0.3.3"
-python-telegram-bot = "^20.2"
+python-telegram-bot = {extras = ["job-queue"], version = "^20.2"}
 nest-asyncio = "^1.5.6"
 telegram = "^0.0.1"
+dacite = "^1.8.0"
 
 [tool.poetry.dev-dependencies]
 debugpy = "^1.6.2"

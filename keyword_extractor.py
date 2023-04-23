@@ -15,7 +15,7 @@ class KeywordExtractor:
 
     self.list_keywords_template = PromptTemplate(
       template=(
-        "Carefully list max 40 important vocabularies (noun, verb, adj, adv,...) "
+        "Carefully list max 25 important vocabularies (noun, verb, adj, adv,...) "
         "sorted from most difficult to least. "
         "The vocabs must appear exactly in the text. \n\n"
         "{text}\n\n{format_instructions}"),
@@ -28,16 +28,18 @@ class KeywordExtractor:
     self.define_template = PromptTemplate(
       template=(
         "Given a list of keywords, provide detailed info for each of them. "
-        "Each keyword has: `input`: the requested keyword;"
-        "`root`: the root form with definite article for noun;"
-        "`pos`: noun, verb, adj, adv, prep, conj,...;`def`: its meaning\n\n"
+        "Each keyword has: input=the requested keyword;"
+        "root=root form of the keyword;"
+        "art=the article (der/die/das) if the keyword is noun, otherwise empty;"
+        "pos=noun, verb, adj, adv, prep, conj,...;def=its meaning\n\n"
         "Keywords: {keywords}\n\n{format_instructions}"),
       input_variables=["keywords"],
       partial_variables={
         "format_instructions":
         ("The output should present one Keyword per line. Example:\n"
-         "input=Informationsschalter;root=der Informationsschalter;pos=Noun;def=information desk\n"
-         "input=sonniger;root=sonnig;pos=Adj;def=sunny")
+         "input=Informationsschalter;root=Informationsschalter;"
+         "pos=Noun;art=der;def=information desk\n"
+         "input=sonniger;root=sonnig;pos=Adj;art=;def=sunny")
       })
 
     self.list_keywords_chain = LLMChain(prompt=self.list_keywords_template,
@@ -58,14 +60,6 @@ class KeywordExtractor:
 
       for sentence in sentences:
         if pattern.search(sentence):
-          # match_start = pattern.search(sentence).start()
-          # start = max(0, match_start - 40)
-          # end = min(len(sentence), match_start + len(keyword) + 40)
-          # truncated_sentence = sentence[start:end]
-          # if start > 0:
-          #   truncated_sentence = "..." + truncated_sentence
-          # if end < len(sentence):
-          #   truncated_sentence = truncated_sentence + "..."
           found_sentences.append(sentence)
           break
       else:
@@ -83,10 +77,12 @@ class KeywordExtractor:
       keywords=keywords_str)
     print(defined_keywords_str)
     # Step 3: Parse keywords
-    pattern = r"input=(.+?);root=(.+?);pos=(.+?);def=(.+)"
+    pattern = r"input=(.+);\s?root=(.+);\s?pos=(.+);\s?art=(.*);\s?def=(.+)"
     for match in re.finditer(pattern, defined_keywords_str):
-      word, root, pos, definition = match.groups()
+      word, root, pos, art, definition = match.groups()
       snippet = ""  # Set to empty string since it is not provided in the input
+      if pos.lower() == "noun" and art:
+        root = f'{art} {root}'
       keyword = Keyword(root=root,
                         word=word,
                         pos=pos,
