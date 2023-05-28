@@ -9,17 +9,10 @@ from telegram import ReplyKeyboardRemove, Update, Poll, Message
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ChatAction
 
-from telegram.ext import (
-  Application,
-  CommandHandler,
-  ContextTypes,
-  ConversationHandler,
-  MessageHandler,
-  CallbackQueryHandler,
-  PollAnswerHandler,
-  filters,
-  JobQueue
-)
+from telegram.ext import (Application, CommandHandler, ContextTypes,
+                          ConversationHandler, MessageHandler,
+                          CallbackQueryHandler, PollAnswerHandler, filters,
+                          JobQueue)
 
 from keyword_extractor import KeywordExtractor
 from question_extractor import QuestionExtractor
@@ -101,16 +94,16 @@ async def learn_handler(update: Update,
   await update.message.reply_text(
     "I'm extracting keywords and questions, please wait ~30 seconds...")
   # Run all requests in parallel.
-  keywords_task = asyncio.create_task(
-    keyword_extractor.extract_keywords(text))
+  keywords_task = asyncio.create_task(keyword_extractor.extract_keywords(text))
   questions_task = asyncio.create_task(
     question_extractor.extract_questions(text))
 
   # Generate keywords for the session.
   session.keywords = await keywords_task
-  await update.message.reply_text("Click a keyword to learn more:",
-                                  reply_markup=create_keywords_keyboard(
-                                    user_profile))
+  await update.message.reply_text(
+    "Click a keyword to learn more:",
+    reply_markup=create_keywords_keyboard(user_profile))
+  await db.set_user_profile(user_profile)
 
   # Generate quiz and start asking questions
   session.quiz = await questions_task
@@ -121,7 +114,8 @@ async def learn_handler(update: Update,
   return ASK_QUESTION
 
 
-def create_keywords_keyboard(user_profile: UserProfile) -> InlineKeyboardMarkup:
+def create_keywords_keyboard(
+    user_profile: UserProfile) -> InlineKeyboardMarkup:
   logging.info("Entering create_keywords")
   session = user_profile.sessions[-1]
   keywords = [keyword.word for keyword in session.keywords]
@@ -155,8 +149,14 @@ async def ask_question_handler(update: Update,
     await context.bot.send_message(session.chat_id,
                                    f'{session.summary_quiz()}')
     if (session.text != "VocabQuiz"):
-      await context.bot.send_message(session.chat_id,
-              "Select /morequestions, /translate, /stoplearn, or /learnnew to proceed")
+      await context.bot.send_message(
+        session.chat_id,
+        "Send /morequestions, /translate, /stoplearn, or /learnnew to proceed"
+      )
+    else:
+      await context.bot.send_message(
+        session.chat_id,
+        "Send /vocabs to practice more")
   else:
     question = session.quiz[session.next_question_idx]
     logger.info(f'ask_question: {question}')
@@ -247,9 +247,8 @@ async def keywords_on_click_handler(update: Update,
       if keyword.summary() == query.message.text:
         # Users click on the same keyword, skip.
         return None
-      await query.edit_message_text(keyword.summary(),
-                                    reply_markup=create_keywords_keyboard(
-                                      user_profile))
+      await query.edit_message_text(
+        keyword.summary(), reply_markup=create_keywords_keyboard(user_profile))
     else:
       await query.answer("Keyword not found.")
 
@@ -279,7 +278,7 @@ async def random_text_handler(update: Update,
                               context: ContextTypes.DEFAULT_TYPE) -> int:
   logging.info("Entering random_text_handler")
   message = await create_placeholder_message(update.effective_user.id, context)
-  random_type = random.choice(["dialog", "story"])
+  random_type = random.choice(["story"])
   level = random.choice(["A1", "A2", "B1", "B2"])
   level_map = {
     "/randomA1": "A1",
@@ -292,7 +291,8 @@ async def random_text_handler(update: Update,
   await message.edit_text(
     f"Generating a German {random_type} at {level} level for you to learn...")
   text = await ask_anything_extractor.extract_response(
-    f"Give me an interesting {random_type} that usually appears in German {level} reading test. Only include German text!")
+    f"Give me an interesting {random_type} that usually appears in German {level} reading test. Only include German text!"
+  )
   text = remove_introducing_paragraph(text)
   text = text.replace("\n\n", "\n")
   await message.edit_text(text)
@@ -355,7 +355,7 @@ async def translate_handler(update: Update,
   message = await create_placeholder_message(update.message.chat_id, context)
   if len(context.args) > 0:
     text = " ".join(context.args)
-    translation = await translate_extractor.extract_translation(text)
+    translation = await translation_extractor.extract_translation(text)
   elif user_profile.sessions and user_profile.sessions[-1].end_time is None:
     # If the user is in the middle of a session, use the last session's text.
     session = user_profile.sessions[-1]
@@ -363,20 +363,20 @@ async def translate_handler(update: Update,
       # Reuses existing translation if there is.
       translation = session.translation
     else:
-      translation = await translate_extractor.extract_translation(session.text)
+      translation = await translation_extractor.extract_translation(
+        session.text)
       session.translation = translation
       await db.set_user_profile(user_profile)
   else:
-    await message.edit_text(
-      "No text to translate. Send /translate <text>")
+    await message.edit_text("No text to translate. Send /translate <text>")
     return
   # Reply to the user with the translation
   await message.edit_text(translation)
-                              
+
 
 async def refresh_vocab_quiz():
   all_user_profiles = await db.get_all_user_profiles()
-  
+
   for user_profile in all_user_profiles:
     due_vocabs = user_profile.vocabs.due_vocabs(n=30)
     if not due_vocabs:
@@ -394,10 +394,12 @@ async def refresh_vocab_quiz():
     if len(quiz_vocabs) == 0:
       continue
 
-    new_questions = await vocab_question_extractor.extract_questions(vocabs=quiz_vocabs)
-    
+    new_questions = await vocab_question_extractor.extract_questions(
+      vocabs=quiz_vocabs)
+
     for root, question in new_questions:
-      matched_vocab = next(vocab for vocab in quiz_vocabs if vocab.root == root)
+      matched_vocab = next(vocab for vocab in quiz_vocabs
+                           if vocab.root == root)
       if not matched_vocab:
         continue
       matched_vocab.quiz.append(question)
@@ -405,7 +407,7 @@ async def refresh_vocab_quiz():
     await db.set_user_profile(user_profile)
 
 
-async def remind_vocabs(user_profiles: List[UserProfile], 
+async def remind_vocabs(user_profiles: List[UserProfile],
                         context: ContextTypes.DEFAULT_TYPE):
   for user_profile in user_profiles:
     if not user_profile.sessions:
@@ -414,22 +416,26 @@ async def remind_vocabs(user_profiles: List[UserProfile],
 
     due_vocabs = user_profile.vocabs.due_vocabs(n=10)
     if not due_vocabs:
-      await context.bot.send_message(chat_id=latest_session.chat_id, 
-                                     text=f'No more vocabs due today, great job!')
+      await context.bot.send_message(
+        chat_id=latest_session.chat_id,
+        text=f'No more vocabs due today, great job!')
       continue
-  
+
     message = "Here are your due vocabs for today:\n\n"
     for i, vocab in enumerate(due_vocabs):
       message += f"{i+1}. {vocab.root}\n"
       for encounter in vocab.encounters:
         message += f"  - {encounter.summary()}\n"
       message += "\n"
-  
-    await context.bot.send_message(chat_id=latest_session.chat_id, text=message)
+
+    await context.bot.send_message(chat_id=latest_session.chat_id,
+                                   text=message)
     await refresh_vocab_quiz()
-    await context.bot.send_message(chat_id=latest_session.chat_id, 
-                                   text="Send /vocabquiz to show how well you remember these words.")
- 
+    await context.bot.send_message(
+      chat_id=latest_session.chat_id,
+      text="Send /vocabquiz to show how well you remember these words.")
+
+
 async def remind_vocabs_handler(context: ContextTypes.DEFAULT_TYPE):
   all_user_profiles = await db.get_all_user_profiles()
   await remind_vocabs(all_user_profiles, context)
@@ -440,7 +446,8 @@ async def vocabs_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await remind_vocabs([user_profile], context)
 
 
-async def vocabquiz_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def vocabquiz_handler(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE):
   logging.info("Entering vocabquiz_handler")
 
   user_profile = await db.get_user_profile(update.effective_user.id)
@@ -450,14 +457,17 @@ async def vocabquiz_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
   quiz = [random.choice(vocab.quiz) for vocab in due_vocabs if vocab.quiz][:10]
   vocab_roots = [vocab.root for vocab in due_vocabs if vocab.quiz][:10]
   session_id = len(user_profile.sessions)
-  session = LearningSession(session_id=session_id, text="VocabQuiz", 
+  session = LearningSession(session_id=session_id,
+                            text="VocabQuiz",
                             chat_id=update.effective_chat.id,
-                            vocab_roots=vocab_roots, quiz=quiz,
+                            vocab_roots=vocab_roots,
+                            quiz=quiz,
                             start_time=datetime.now())
   user_profile.sessions.append(session)
   await db.set_user_profile(user_profile)
 
   return await ask_question_handler(update, context)
+
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
   help_text = (
@@ -478,11 +488,14 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
   # Create the Application and pass it your bot's token.
-  application = Application.builder().token(TELEGRAM_BOT_TOKEN).concurrent_updates(True).build()
+  application = Application.builder().token(
+    TELEGRAM_BOT_TOKEN).concurrent_updates(True).build()
   default_handlers = [
     CommandHandler("stoplearn", stop_learn_handler),
     CommandHandler('define', define_handler),
+    CommandHandler('def', define_handler),
     CommandHandler('translate', translate_handler),
+    CommandHandler('trans', translate_handler),
     CommandHandler('help', help_handler),
     CommandHandler('vocabs', vocabs_handler),
     CommandHandler('vocabquiz', vocabquiz_handler),
@@ -502,6 +515,7 @@ def main():
       ASK_QUESTION: [
         CommandHandler("morequestions", morequestions_handler),
         CommandHandler("translate", translate_handler),
+        CommandHandler("trans", translate_handler),
         CommandHandler("learnnew", learn_handler),
         CommandHandler("learn", learn_handler)
       ]
@@ -526,9 +540,7 @@ def main():
 
   # Schedule the handler to run every day at 10:00am
   job_queue = application.job_queue
-  job_queue.run_daily(
-      remind_vocabs_handler,
-      time(hour=10, minute=0, second=0))
+  job_queue.run_daily(remind_vocabs_handler, time(hour=10, minute=0, second=0))
   # Run the bot until the user presses Ctrl-C
   application.run_polling()
 

@@ -1,8 +1,6 @@
 from datetime import datetime
 import unittest
-import asyncio
 from data_models import UserProfileDB, UserProfile, LearningSession
-from replit import db
 
 
 class TestUserProfileDB(unittest.IsolatedAsyncioTestCase):
