@@ -29,12 +29,11 @@ python3 -m poetry add nltk pydantic openai langchain tiktoken python-telegram-bo
 
 # Screenshots:
 
-![Screenshot /learn](screenshots/screenshot_learn.png)
+<p float="left">
+  <img src="screenshots/screenshot_learn.png" width="400" alt="Screenshot /learn" />
+  <img src="screenshots/screenshot_quiz.png" width="400" alt="Screenshot /learn quiz" />
+  <img src="screenshots/screenshot_quiz_summary.png" width="400" alt="Screenshot /learn quiz summary" />
+  <img src="screenshots/screenshot_vocab_daily.png" width="400" alt="Screenshot vocab daily" />
+  <img src="screenshots/screenshot_vocab_quiz.png" width="400" alt="Screenshot vocab quiz" />
+</p>
 
-![Screenshot /learn quiz](screenshots/screenshot_quiz.png)
-
-![Screenshot /learn quiz summary](screenshots/screenshot_quiz_summary.png)
-
-![Screenshot vocab daily](screenshots/screenshot_vocab_daily.png)
-
-![Screenshot vocab quiz](screenshots/screenshot_vocab_quiz.png)
